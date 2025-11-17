@@ -699,13 +699,15 @@ static void ppa_set_CDFTL(struct ssd* ssd, uint64_t lpn, struct ppa* ppa)
     //CTP hit
     if (gtden->location == 0) {
         ctpen = find_ctp(ssd, tvpn);
-        ctpen->mp->dppn[offset] = *ppa;
-        ssd->gtd[tvpn].dirty = 1;
-    
-        cmten = find_cmt(ssd, lpn);
-        if (cmten != 0)
-            cmt_delete(ssd, cmten);
-        return;
+        if (ctpen != 0) {
+            ctpen->mp->dppn[offset] = *ppa;
+            ssd->gtd[tvpn].dirty = 1;
+        
+            cmten = find_cmt(ssd, lpn);
+            if (cmten != 0)
+                cmt_delete(ssd, cmten);
+            return;
+        }
     }
     //CTP miss
     if (gtden->location == 1 || ctpen == 0) {
