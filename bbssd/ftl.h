@@ -262,6 +262,17 @@ struct trans_flash {
     int cur_blk;
     int cur_pg;
 };
+
+struct stats {
+    uint64_t cmt_accesses;
+    uint64_t cmt_hits;
+
+    uint64_t ctp_accesses;
+    uint64_t ctp_hits;
+
+    uint64_t total_nand_writes;
+    uint64_t host_nand_writes;
+};
 //Add command end
 
 struct ssd {
@@ -294,6 +305,8 @@ struct ssd {
     struct ctp_hash* ctp_hash_table;
 
     struct trans_flash translation_flash;
+
+    struct stats perf_stats;
     //Add command end
 };
 
