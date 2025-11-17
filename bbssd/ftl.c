@@ -451,6 +451,7 @@ static void trans_write(struct ssd* ssd, uint64_t tvpn, struct map_page* mp)
         ++(tf->cur_blk);
         --(tf->free_blk_num);
     }
+    ssd->perf_stats.total_nand_writes++;
 }
 static void trans_read(struct ssd* ssd, uint64_t tvpn, struct map_page* mp)
 {
@@ -663,14 +664,21 @@ static struct ppa ppa_get_CDFTL(struct ssd* ssd, uint64_t lpn)
     uint64_t tvpn = lpn / SECTS_PER_TRANS_PAGE;
     uint64_t offset = lpn % SECTS_PER_TRANS_PAGE;
 
+    ssd->perf_stats.cmt_accesses++;
     struct cmt_entry* cmten = find_cmt(ssd, lpn);
-    if (cmten != 0)
+    if (cmten != 0){
+        ssd->perf_stats.cmt_hits++;
         return cmten->data.dppn;
+    }
 
     struct ctp_entry* ctpen = NULL;
     struct gtd_entry* gtden = &ssd->gtd[tvpn];
     if (gtden->location == 0) {
+        ssd->perf_stats.ctp_accesses++;
         ctpen = find_ctp(ssd, tvpn);
+        if (ctpen != 0) {
+        ssd->perf_stats.ctp_hits++;
+        }
     }
     if (gtden->location == 1 || ctpen == 0) {
         ctpen = ctp_free_alloc(ssd);
@@ -700,23 +708,30 @@ static void ppa_set_CDFTL(struct ssd* ssd, uint64_t lpn, struct ppa* ppa)
     struct gtd_entry* gtden = &ssd->gtd[tvpn];
     //CTP hit
     if (gtden->location == 0) {
+        ssd->perf_stats.ctp_accesses++;
         ctpen = find_ctp(ssd, tvpn);
         if (ctpen != 0) {
+            ssd->perf_stats.ctp_hits++;
             ctpen->mp->dppn[offset] = *ppa;
             ssd->gtd[tvpn].dirty = 1;
-        
+
+            ssd->perf_stats.cmt_accesses++;
             cmten = find_cmt(ssd, lpn);
-            if (cmten != 0)
+            if (cmten != 0) {
+                ssd->perf_stats.cmt_hits++;
                 cmt_delete(ssd, cmten);
+            }
             return;
         }
     }
     //CTP miss
     if (gtden->location == 1 || ctpen == 0) {
+        ssd->perf_stats.cmt_accesses++;
         cmten = find_cmt(ssd, lpn);
         //CMT hit
         if (cmten != 0)
         {
+            ssd->perf_stats.cmt_hits++;
             cmten->data.dppn = *ppa;
             cmten->data.dirty = 1;
             return;
@@ -1128,6 +1143,7 @@ static uint64_t gc_write_page(struct ssd *ssd, struct ppa *old_ppa)
     ssd_advance_write_pointer(ssd);
 
     ssd->n->Bytes_written_during_GC += ssd->sp.secs_per_pg * ssd->sp.secsz;
+    ssd->perf_stats.total_nand_writes++;
 
     if (ssd->sp.enable_gc_delay) {
         struct nand_cmd gcw;
@@ -1317,6 +1333,8 @@ static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
 
     for (lpn = start_lpn; lpn <= end_lpn; lpn++) {
 
+        ssd->perf_stats.host_nand_writes++;
+        
         //Check with original pmt
         ppa = ppa_get_CDFTL(ssd, lpn); //CDFTL
         //ppa_pmt = get_maptbl_ent(ssd, lpn); //PMT
@@ -1339,6 +1357,8 @@ static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
 
         /* need to advance the write pointer here */
         ssd_advance_write_pointer(ssd);
+
+        ssd->perf_stats.total_nand_writes++;
 
         struct nand_cmd swr;
         swr.type = USER_IO;
